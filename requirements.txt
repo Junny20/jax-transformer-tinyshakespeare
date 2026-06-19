@@ -1,0 +1,8 @@
+# GPU training (Colab/cloud): replace jax[cpu] with jax[cuda12]
+jax[cpu]
+jaxlib
+optax
+numpy
+pyyaml
+matplotlib
+pytest

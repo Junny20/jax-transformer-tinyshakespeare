@@ -1,0 +1,13 @@
+n_layers: 6
+n_heads: 6
+d_model: 384
+d_ff: 1536
+ctx_len: 256
+dropout: 0.1
+batch_size: 64
+max_steps: 5000
+lr: 3.0e-4
+weight_decay: 0.1
+warmup_steps: 200
+val_interval: 200
+val_batches: 50
