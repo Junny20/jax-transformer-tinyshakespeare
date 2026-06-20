@@ -25,6 +25,8 @@ A decoder-only GPT-style language model trained on TinyShakespeare, implemented 
 
 ## Results
 
+| Metric | Value |
+|---|---|
 | Final val cross-entropy | 1.47 |
 | XLA speedup | ~3× |
 
