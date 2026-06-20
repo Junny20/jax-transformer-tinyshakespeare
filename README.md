@@ -23,17 +23,6 @@ A decoder-only GPT-style language model trained on TinyShakespeare, implemented 
 - GELU feedforward blocks (tanh approximation)
 - Optax AdamW with linear warmup + cosine decay
 
-## Results
-
-| Metric | Value |
-|---|---|
-| Final val cross-entropy | 1.47 |
-| JIT step time | — ms (measured on GPU) |
-| Eager step time | — ms |
-| XLA speedup | ~3× |
-
-Run `vmap/train.py` to reproduce. Fill in the measured values above after training on GPU.
-
 ## Generated Sample
 
 ```
