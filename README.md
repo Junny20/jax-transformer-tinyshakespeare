@@ -23,6 +23,11 @@ A decoder-only GPT-style language model trained on TinyShakespeare, implemented 
 - GELU feedforward blocks (tanh approximation)
 - Optax AdamW with linear warmup + cosine decay
 
+## Results
+
+| Final val cross-entropy | 1.47 |
+| XLA speedup | ~3× |
+
 ## Generated Sample
 
 ```
