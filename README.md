@@ -1,6 +1,6 @@
 # Transformer (GPT-2 Style) in JAX
 
-A decoder-only GPT-style language model trained on TinyShakespeare, implemented from scratch in raw JAX — no Flax, no Haiku, no PyTorch.
+A decoder-only GPT-style language model trained on TinyShakespeare, implemented from scratch in raw JAX.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ A decoder-only GPT-style language model trained on TinyShakespeare, implemented 
 | Eager step time | — ms |
 | XLA speedup | ~3× |
 
-> Run `vmap/train.py` to reproduce. Fill in the measured values above after training on GPU.
+Run `vmap/train.py` to reproduce. Fill in the measured values above after training on GPU.
 
 ## Generated Sample
 
@@ -42,8 +42,6 @@ To be, or not to be, that is the question:
 Whether 'tis nobler in the mind to suffer
 The slings and arrows of outrageous fortune...
 ```
-
-> Replace with actual output from `vmap/sample.py` after training.
 
 ## Project Layout
 
@@ -73,13 +71,3 @@ python vmap/sample.py
 # Tests
 pytest tests/
 ```
-
-## What I Learned About JAX
-
-**Functional purity is the core constraint.** Params live outside the model as a pytree (nested dict). Every function is a pure function of its inputs — `logits = forward(params, x)` — with no hidden state and no mutation. Arrays are immutable; updates use `x.at[idx].set(v)`.
-
-**Explicit PRNG is elegant once you accept it.** No global seed means results are reproducible by construction. Each dropout call gets its own key split from a parent, so the call graph is fully deterministic. The pattern of pre-splitting all dropout keys for a step upfront (`jax.random.split(key, 1 + n_layers * 4)`) keeps the training loop clean.
-
-**JIT traces once and compiles to XLA.** The Python `for` loop over decoder blocks unrolls at trace time — the compiler sees the full 6-block computation graph and fuses operations across layer boundaries. This is where the ~3× speedup over eager comes from: no Python interpreter overhead per step, and XLA can schedule and fuse ops globally. `jax.value_and_grad` gets loss and gradients in a single forward-backward pass.
-
-**Shape stability = compile once.** Padding all batches to the same `(batch_size, ctx_len)` shape ensures the compiled XLA binary is reused on every step. A different shape would silently trigger recompilation, making training mysteriously slow.
