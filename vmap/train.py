@@ -15,7 +15,6 @@ from vmap.data_loader import get_batch
 
 
 def cross_entropy_loss(logits, targets):
-    """logits: (B, T, V), targets: (B, T) → scalar mean cross-entropy loss."""
     B, T, V = logits.shape
     return optax.softmax_cross_entropy_with_integer_labels(
         logits.reshape(B * T, V), targets.reshape(B * T)
@@ -23,11 +22,6 @@ def cross_entropy_loss(logits, targets):
 
 
 def make_train_step(cfg: dict, optimizer):
-    """Return a jit-compiled train step that closes over cfg and optimizer.
-
-    The full forward + loss + grad + optimizer update is compiled as a single
-    XLA fused computation — this is where the per-step speedup over eager comes from.
-    """
     n_heads   = cfg['n_heads']
     n_layers  = cfg['n_layers']
     drop_rate = cfg['dropout']
@@ -47,10 +41,8 @@ def make_train_step(cfg: dict, optimizer):
 
 
 def make_eval_step(cfg: dict):
-    """Return a jit-compiled eval step (no dropout, deterministic)."""
-    n_heads  = cfg['n_heads']
-    n_layers = cfg['n_layers']
-    # Dummy key: training=False means it's never consumed by any dropout op
+    n_heads    = cfg['n_heads']
+    n_layers   = cfg['n_layers']
     _dummy_key = jax.random.PRNGKey(0)
 
     @jax.jit
@@ -62,18 +54,11 @@ def make_eval_step(cfg: dict):
 
 
 def benchmark_jit_vs_eager(cfg: dict, optimizer, params, opt_state, x, y, n_trials: int = 20):
-    """Compare jit step time vs eager step time.
-
-    Uses block_until_ready() on both sides — JAX dispatch is async, so wall-clock
-    timing without blocking measures dispatch latency, not actual compute.
-    """
     n_heads   = cfg['n_heads']
     n_layers  = cfg['n_layers']
     drop_rate = cfg['dropout']
     train_step = make_train_step(cfg, optimizer)
 
-    # ── JIT ──────────────────────────────────────────────────────────────────
-    # First call triggers XLA compilation; exclude it from timing
     key = jax.random.PRNGKey(99)
     p, s, _ = train_step(params, opt_state, x, y, key)
     jax.block_until_ready(p)
@@ -85,7 +70,6 @@ def benchmark_jit_vs_eager(cfg: dict, optimizer, params, opt_state, x, y, n_tria
     jax.block_until_ready(loss)
     jit_ms = (time.perf_counter() - t0) / n_trials * 1000
 
-    # ── Eager ─────────────────────────────────────────────────────────────────
     def eager_step(p, s, x, y, key):
         def loss_fn(params):
             logits = transformer_forward(params, x, n_heads, n_layers, drop_rate, key, training=True)
@@ -94,7 +78,6 @@ def benchmark_jit_vs_eager(cfg: dict, optimizer, params, opt_state, x, y, n_tria
         updates, new_s = optimizer.update(grads, s, p)
         return optax.apply_updates(p, updates), new_s, loss
 
-    # Warmup (avoids cold-start bias)
     p2, s2, _ = eager_step(params, opt_state, x, y, jax.random.PRNGKey(0))
     jax.block_until_ready(p2)
 
@@ -109,16 +92,15 @@ def benchmark_jit_vs_eager(cfg: dict, optimizer, params, opt_state, x, y, n_tria
 
 
 def train(cfg: dict, data_train: np.ndarray, data_val: np.ndarray):
-    batch_size    = cfg['batch_size']
-    ctx_len       = cfg['ctx_len']
-    max_steps     = cfg['max_steps']
-    warmup_steps  = cfg['warmup_steps']
-    lr            = cfg['lr']
-    weight_decay  = cfg['weight_decay']
-    val_interval  = cfg['val_interval']
-    val_batches   = cfg['val_batches']
+    batch_size   = cfg['batch_size']
+    ctx_len      = cfg['ctx_len']
+    max_steps    = cfg['max_steps']
+    warmup_steps = cfg['warmup_steps']
+    lr           = cfg['lr']
+    weight_decay = cfg['weight_decay']
+    val_interval = cfg['val_interval']
+    val_batches  = cfg['val_batches']
 
-    # ── Optimizer: AdamW with linear warmup + cosine decay ───────────────────
     schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0,
         peak_value=lr,
@@ -131,7 +113,6 @@ def train(cfg: dict, data_train: np.ndarray, data_val: np.ndarray):
         optax.adamw(learning_rate=schedule, weight_decay=weight_decay),
     )
 
-    # ── Init ──────────────────────────────────────────────────────────────────
     key = jax.random.PRNGKey(42)
     key, init_key = jax.random.split(key)
     params    = init_params(init_key, cfg)
@@ -145,8 +126,8 @@ def train(cfg: dict, data_train: np.ndarray, data_val: np.ndarray):
     train_step = make_train_step(cfg, optimizer)
     eval_step  = make_eval_step(cfg)
 
-    train_losses: list[float]           = []
-    val_losses:   list[tuple[int,float]] = []
+    train_losses: list[float]            = []
+    val_losses:   list[tuple[int, float]] = []
 
     for step in range(max_steps):
         key, bk, sk = jax.random.split(key, 3)
@@ -196,13 +177,11 @@ if __name__ == '__main__':
 
     params, optimizer, opt_state, train_losses, val_losses = train(cfg, data_train, data_val)
 
-    # ── Save model ────────────────────────────────────────────────────────────
     save_path = os.path.join(os.path.dirname(__file__), '..', 'params', 'model.pkl')
     with open(save_path, 'wb') as f:
         pickle.dump({'params': params, 'cfg': cfg, 'stoi': stoi, 'itos': itos}, f)
     print(f"\nModel saved → {save_path}")
 
-    # ── JIT vs eager speedup benchmark ────────────────────────────────────────
     schedule = optax.warmup_cosine_decay_schedule(
         init_value=0.0, peak_value=cfg['lr'],
         warmup_steps=cfg['warmup_steps'], decay_steps=cfg['max_steps'],
@@ -211,14 +190,13 @@ if __name__ == '__main__':
     bench_opt = optax.chain(optax.clip_by_global_norm(1.0), optax.adamw(learning_rate=schedule))
     bk = jax.random.PRNGKey(0)
     x_bench, y_bench, _ = get_batch(data_train, cfg['batch_size'], cfg['ctx_len'], bk)
-    init_p  = params
-    init_s  = bench_opt.init(init_p)
+    init_p = params
+    init_s = bench_opt.init(init_p)
     jit_ms, eager_ms, speedup = benchmark_jit_vs_eager(cfg, bench_opt, init_p, init_s, x_bench, y_bench)
     print(f"\nJIT step:   {jit_ms:.1f} ms")
     print(f"Eager step: {eager_ms:.1f} ms")
     print(f"Speedup:    {speedup:.2f}×")
 
-    # ── Training curve ────────────────────────────────────────────────────────
     curve_path = os.path.join(os.path.dirname(__file__), '..', 'params', 'training_curve.png')
     fig, ax = plt.subplots(figsize=(9, 4))
     ax.plot(train_losses, alpha=0.4, label='train (per step)')

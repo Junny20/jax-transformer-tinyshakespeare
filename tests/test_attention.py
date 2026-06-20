@@ -14,8 +14,6 @@ from vmap.tokenizer import build_vocab, encode, decode
 from vmap.data_loader import get_batch
 
 
-# ── Configs ────────────────────────────────────────────────────────────────────
-
 TINY_CFG = {
     'n_layers': 2, 'n_heads': 2, 'd_model': 16, 'd_ff': 32,
     'ctx_len': 8,  'dropout': 0.0, 'vocab_size': 10,
@@ -26,8 +24,6 @@ FULL_CFG = {
     'ctx_len': 256, 'dropout': 0.0, 'vocab_size': 65,
 }
 
-
-# ── Tokenizer ──────────────────────────────────────────────────────────────────
 
 def test_tokenizer_roundtrip():
     text = "hello world"
@@ -46,8 +42,6 @@ def test_encode_returns_int32():
     assert arr.dtype == np.int32
 
 
-# ── Data loader ────────────────────────────────────────────────────────────────
-
 def test_data_loader_shapes():
     data = np.arange(1000, dtype=np.int32)
     x, y, _ = get_batch(data, batch_size=4, ctx_len=16, key=jax.random.PRNGKey(0))
@@ -60,8 +54,6 @@ def test_data_loader_y_is_x_shifted():
     x, y, _ = get_batch(data, batch_size=4, ctx_len=16, key=jax.random.PRNGKey(0))
     np.testing.assert_array_equal(np.array(x[:, 1:]), np.array(y[:, :-1]))
 
-
-# ── LayerNorm ──────────────────────────────────────────────────────────────────
 
 def test_layer_norm_output_shape():
     x = jax.random.normal(jax.random.PRNGKey(0), (2, 4, 16))
@@ -76,8 +68,6 @@ def test_layer_norm_zero_mean_unit_var():
     np.testing.assert_allclose(np.array(out.var(-1)),  1.0, atol=1e-4)
 
 
-# ── GELU ───────────────────────────────────────────────────────────────────────
-
 def test_gelu_shape_preserved():
     x = jax.random.normal(jax.random.PRNGKey(0), (2, 4, 32))
     assert gelu(x).shape == x.shape
@@ -86,8 +76,6 @@ def test_gelu_shape_preserved():
 def test_gelu_positive_for_positive_inputs():
     assert jnp.all(gelu(jnp.array([1.0, 2.0, 3.0])) > 0)
 
-
-# ── MHA ────────────────────────────────────────────────────────────────────────
 
 def test_mha_output_shape():
     cfg = TINY_CFG
@@ -98,11 +86,10 @@ def test_mha_output_shape():
 
 
 def test_mha_causal_masking():
-    """Modifying the last token must not change earlier positions' outputs."""
     cfg = TINY_CFG
     params = init_params(jax.random.PRNGKey(0), cfg)
     x1 = jax.random.normal(jax.random.PRNGKey(1), (1, cfg['ctx_len'], cfg['d_model']))
-    x2 = x1.at[:, -1, :].add(1.0)  # perturb only the last token
+    x2 = x1.at[:, -1, :].add(1.0)
     out1 = mha_forward(x1, params['blocks'][0]['attn'], cfg['n_heads'], None, 0.0, False)
     out2 = mha_forward(x2, params['blocks'][0]['attn'], cfg['n_heads'], None, 0.0, False)
     np.testing.assert_allclose(
@@ -111,8 +98,6 @@ def test_mha_causal_masking():
     )
 
 
-# ── Decoder block ──────────────────────────────────────────────────────────────
-
 def test_decoder_block_shape():
     cfg = TINY_CFG
     params = init_params(jax.random.PRNGKey(0), cfg)
@@ -120,8 +105,6 @@ def test_decoder_block_shape():
     out = decoder_block(x, params['blocks'][0], cfg['n_heads'], None, 0.0, False)
     assert out.shape == x.shape
 
-
-# ── Full forward pass ──────────────────────────────────────────────────────────
 
 def test_forward_output_shape():
     cfg = TINY_CFG
@@ -134,20 +117,12 @@ def test_forward_output_shape():
 
 
 def test_param_count():
-    """Full model should have ~10M parameters (6L/6H/384d)."""
     params = init_params(jax.random.PRNGKey(0), FULL_CFG)
     n_params = sum(x.size for x in jax.tree_util.tree_leaves(params))
     assert 9_000_000 < n_params < 12_000_000, f"Unexpected param count: {n_params:,}"
 
 
-# ── Milestone gate: untrained loss ≈ ln(vocab_size) ───────────────────────────
-
 def test_untrained_loss_near_log_vocab():
-    """Untrained model loss must be close to ln(vocab_size) ≈ 4.17 for vocab=65.
-
-    This is the roadmap milestone gate before starting the training loop.
-    A value far from ln(vocab) indicates a shape or masking bug.
-    """
     cfg = FULL_CFG
     params = init_params(jax.random.PRNGKey(42), cfg)
 
@@ -162,8 +137,7 @@ def test_untrained_loss_near_log_vocab():
         logits.reshape(B * T, cfg['vocab_size']), y.reshape(B * T)
     ).mean()
 
-    expected = float(jnp.log(cfg['vocab_size']))  # ≈ 4.174 for vocab=65
+    expected = float(jnp.log(cfg['vocab_size']))
     assert abs(float(loss) - expected) < 0.5, (
-        f"Untrained loss {float(loss):.4f} deviates too far from ln(vocab)={expected:.4f}. "
-        "Check causal mask, embedding init, and LM head shapes."
+        f"Untrained loss {float(loss):.4f} deviates too far from ln(vocab)={expected:.4f}."
     )

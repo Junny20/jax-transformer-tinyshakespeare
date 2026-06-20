@@ -3,22 +3,6 @@ import jax.numpy as jnp
 
 
 def init_params(key, cfg: dict) -> dict:
-    """Initialize all model parameters as a JAX pytree (nested dict of arrays).
-
-    Param tree structure:
-        embed/token:        (vocab_size, d_model)
-        embed/position:     (ctx_len, d_model)
-        blocks[i]/ln1:      gamma (d_model,), beta (d_model,)
-        blocks[i]/attn:     wq/wk/wv/wo (d_model, d_model), bq/bk/bv/bo (d_model,)
-        blocks[i]/ln2:      gamma (d_model,), beta (d_model,)
-        blocks[i]/mlp:      w1 (d_model, d_ff), b1 (d_ff,),
-                            w2 (d_ff, d_model),  b2 (d_model,)
-        ln_f:               gamma (d_model,), beta (d_model,)
-        lm_head:            (d_model, vocab_size)
-
-    GPT-2 scaled init: output projections (wo, w2) use std = 0.02 / sqrt(2 * n_layers)
-    to keep residual stream variance stable at depth.
-    """
     n_layers   = cfg['n_layers']
     d_model    = cfg['d_model']
     d_ff       = cfg['d_ff']
